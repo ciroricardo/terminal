@@ -8,42 +8,13 @@
  *---------------------------------------------------------------------*/
 User Function Terminal()
 
-	Local _oDlg := Nil
-	Local _oTBar := Nil
-	Local _oMtGet := Nil
-	Local _oFontLab := TFont():New("Arial"   ,,28,,.T.,,,,,.F.,.F.)
-	Local _oFontTxt := TFont():New("FixedSys",,14,,.T.,,,,,.F.,.F.)
-	Local _oFontSml := TFont():New("Arial"   ,,08,,.T.,,,,,.F.,.F.)
-	Local _oFontTrm := TFont():New("FixedSys",,14,,.F.,,,,,.F.,.F.)
-	
-	Local _cCommand := Space(500)
+	Local _oTerminal := Terminal():New()
 	
 	If Type("cEmpAnt") == "U"
 		PREPARE Environment EMPRESA "01" FILIAL "01"
 	EndIf
 	
-	_oDlg := TDialog():New(000,000,600,800,"Terminal",,,,,CLR_BLACK,CLR_WHITE,,,.T.)
-	
-	_oTBar := TBar():new(_oDlg,025,032,.T.,Nil,Nil,"FND_LGND",.F.)
-	_oTBar:nHeight := 30
-	
-	TSay():New(010,010,{|| " Terminal" },_oTBar,,_oFontLab,,,,.T.,CLR_BLACK,CLR_WHITE,400,10)
-	_oBtExit := TBtnBmp2():New(000,000,035,025,"FINAL",,,,{|| _oDlg:End() },_oTBar,"Exit",,.F.,.F.)
-	_oBtExit:align := 2
-	
-	_oTail := TSimpleEditor():New(000,000,_oDlg,400,270)
-	_oTail:lReadOnly := .T.
-	//_oTail:lPixel := .T.
-	//_oTail:Load( "Novo texto <b>Negrito</b><font color=red> Texto em Vermelho</font><font size=14> Texto com tamanho grande</font>" )
-				
-	_oCommands := TGet():New(270,000,{|u| If(PCount()>0,_cCommand := u,_cCommand)},_oDlg,380,012,"@!",{|| .T.},;
-			RGB(47,79,79),RGB(245,245,245),_oFontTxt,.F.,Nil,.T.,Nil,.F.,{|| .T.},.F.,.F.,{|| .T.},.F.,.F.,Nil,"_cCommand",;
-			"",.T.,0,.T.,.F.,.T.,,1,_oFontSml,CLR_BLACK,"Digite os comandos aqui...")
-	
-	_oBtExec := TButton():New(270,380,("&"+ Chr(13) +"Go!"),_oDlg,{|| _oTail:Load("teste") },20,16,,,.F.,.T.,.F.,,.F.,,,.F.)
-	//_oBtAddP:SetCss(sfEstiloBt("OK.png"))
-	
-	_oDlg:Activate(,,,.T.,{|| .T.},,{|| .T.})
+	_oTerminal:Start()
 
 Return()
 
@@ -52,15 +23,22 @@ Return()
  *---------------------------------------------------------------------*/
 Class Terminal
 	//Atributos
-	Data nBgColor as int
-	Data aCommands as Array
+	Data aCommands   as Array
 	
-	//Metodos que você deve usar
+	//Dialog
+	Data oDialog  as Object
+	Data oFontLab as Object
+	Data oFontTrm as Object
+	Data cCommand as String
+	Data cTxtTail as String
+	
+	//Metodos
 	Method New() CONSTRUCTOR
 	Method Start()
-	
-	//Metodos que a classe usa, use por sua conta em risco!
-	Method __LoadCommands()
+	Method OpenDialog()
+	Method AppendText()
+	Method ExecCommand()
+	Method LoadCommands()
 
 EndClass
 
@@ -68,7 +46,15 @@ EndClass
  | Method: New                                                         |
  *---------------------------------------------------------------------*/
 Method New() Class Terminal
-
+	
+	Self:oDialog  := Nil
+	Self:oFontLab := TFont():New("Arial"   ,,28,,.T.,,,,,.F.,.F.)
+	Self:oFontTrm := TFont():New("FixedSys",,14,,.F.,,,,,.F.,.F.)
+	Self:cCommand := Space(250)
+	Self:cTxtTail := ""
+	
+	Self:LoadCommands()
+	
 Return Self
 
 /*---------------------------------------------------------------------*
@@ -76,12 +62,76 @@ Return Self
  *---------------------------------------------------------------------*/
 Method Start() Class Terminal
 
-Return
+	Self:OpenDialog()
+
+Return()
 
 /*---------------------------------------------------------------------*
- | Method: __LoadCommands                                              |
+ | Method: OpenDialog                                                  |
  *---------------------------------------------------------------------*/
-Method __LoadCommands() Class Terminal
+Method OpenDialog() Class Terminal
+
+Local _oObj  := Nil
+Local _cJson := ""
+
+_cJson += '{'
+_cJson += ' "oDlg": null, '
+_cJson += ' "oTBar": null, '
+_cJson += ' "oTSay": null, '
+_cJson += ' "oBtExit": null, '
+_cJson += ' "oTail": null, '
+_cJson += ' "oGetCmd": null '
+_cJson += '}'
+
+If FWJsonDeserialize(_cJson, @_oObj)
+	Self:oDialog := _oObj
+	
+	Self:oDialog:oDlg    := TDialog():New(000,000,600,800,"Terminal",,,,,CLR_BLACK,CLR_WHITE,,,.T.)
+	Self:oDialog:oTBar   := TBar():new(Self:oDialog:oDlg,025,032,.T.,Nil,Nil,"FND_LGND",.F.)
+	Self:oDialog:oTBar:nHeight := 30
+	Self:oDialog:oTSay   := TSay():New(010,010,{|| " Terminal" },Self:oDialog:oTBar,,Self:oFontLab,,,,.T.,CLR_BLACK,CLR_WHITE,400,10)
+	Self:oDialog:oBtExit := TBtnBmp2():New(000,000,035,025,"FINAL",,,,{|| Self:oDialog:oDlg:End() },Self:oDialog:oTBar,"Exit",,.F.,.F.)
+	Self:oDialog:oBtExit:align := 2
+	Self:oDialog:oTail   := TSimpleEditor():New(000,000,Self:oDialog:oDlg,400,270)
+	Self:oDialog:oTail:bSetGet := {|| If(PCount()>0,Self:cTxtTail := u,Self:cTxtTail) }
+	Self:oDialog:oTail:lReadOnly := .T.
+	Self:oDialog:oGetCmd := TGet():New(270,000,{|u| If(PCount()>0,Self:cCommand := u,Self:cCommand)},Self:oDialog:oDlg,400,012,"@!",{|| (Self:oDialog:oGetCmd:SetFocus(),.T.)},;
+		RGB(47,79,79),RGB(245,245,245),Self:oFontTrm,.F.,Nil,.T.,Nil,.F.,{|| .T.},.F.,.F.,{|| Self:AppendText(Self:cCommand) },.F.,.F.,Nil,"Self:cCommand",;
+		"",.T.,0,.T.,.F.,.T.,,1,Self:oFontTrm,CLR_BLACK,"Digite os comandos aqui...")
+	Self:oDialog:oGetCmd:SetFocus()
+	Self:oDialog:oDlg:Activate(,,,.T.,{|| .t.},,{|| .t.})
+Else
+	MessageBox("Classe disponivel apenas para Microsiga Protheus 11 em diante.","Atenção",48)
+EndIf
+
+Return Nil
+
+/*---------------------------------------------------------------------*
+ | Method: AppendText                                                  |
+ *---------------------------------------------------------------------*/
+Method AppendText(_cTexto) Class Terminal
+
+	Self:cCommand := Space(250)
+	Self:cTxtTail += _cTexto + "<br>"
+	Self:oDialog:oTail:GoEnd()
+	Self:oDialog:oDlg:CommitControls()
+
+Return .T.
+
+/*---------------------------------------------------------------------*
+ | Method: ExecCommand                                                 |
+ *---------------------------------------------------------------------*/
+Method ExecCommand() Class Terminal
+	
+	Local _cRet := ""
+	//Self:cCommand
+	
+Return _cRet
+
+/*---------------------------------------------------------------------*
+ | Method: LoadCommands                                                |
+ *---------------------------------------------------------------------*/
+Method LoadCommands() Class Terminal
 
 	Self:aCommands := {}
 	//aAdd(Self:aCommands,{})
